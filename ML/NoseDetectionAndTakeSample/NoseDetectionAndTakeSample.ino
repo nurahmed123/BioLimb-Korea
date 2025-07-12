@@ -38,9 +38,9 @@ void loop() {
       stepper3.run();
     }
 
-    delay(1000); // short pause
+    delay(1000); 
 
-    // Activate pusher motor
+   
     pusher.moveTo(200); // push cotton bud 200 steps
     while (pusher.distanceToGo() != 0) {
       pusher.run();

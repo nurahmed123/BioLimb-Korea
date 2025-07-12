@@ -6,7 +6,7 @@ if RASPBERRY:
     ser = serial.Serial ("COM3") #Open named port
 else:
     # python -m serial.tools.list_ports
-    ser = serial.Serial ("/dev/cu.debug-console", 9600) #Open named port
+    ser = serial.Serial ("/dev/cu.usbmodemF412FA9F73AC2", 9600) #Open named port
 
 # ser.baudrate = 9600 #Set baud rate to 9600
 
