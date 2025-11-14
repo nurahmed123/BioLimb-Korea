@@ -1,0 +1,116 @@
+Title: Methods for Real-Time Human Face Detection and Mouth State Estimation in a Robotic Sampling System
+
+Overview
+This work implements a real-time perception pipeline to detect human faces and estimate mouth state to safely control a robotic arm that collects oral samples. The system integrates classical computer vision with pre-trained machine learning models for robust, low-latency operation and serial communication with a microcontroller controlling the robot.
+
+System Configuration
+- Camera: Standard USB webcam capturing RGB frames.
+- Software: Python 3.x, OpenCV, dlib, imutils, playsound, pyserial.
+- Models: OpenCV Haar Cascade for frontal face detection, dlib 68-point facial landmark predictor.
+- Hardware Integration: Serial communication to the robot controller (Arduino/Raspberry Pi) to gate approach and actuation.
+
+----------------------
+Method: Face Detection (Presence and Distance Estimation)
+1) Preprocessing
+   - Convert each frame to grayscale to reduce computation and stabilize detection.
+
+2) Detection Algorithm
+   - Use OpenCV’s pre-trained Haar Cascade classifier (`haarcascade_frontalface_default.xml`) to detect frontal faces.
+   - Parameters: `scaleFactor = 1.3`, `minNeighbors = 5` for balancing recall and precision.
+   - For each detected face, compute the bounding box width in pixels (`w`).
+
+3) Camera Calibration (Focal Length)
+   - Compute the effective focal length `f` using a reference image with known face width and distance:
+     f = (w_ref × D_known) / W_known
+     where `w_ref` is the detected face width (pixels) in the reference image, `D_known` is the measured camera-to-face distance (cm), and `W_known` is the real-world face width (cm).
+   - In our configuration: `D_known = 28 cm`, `W_known = 14.3 cm` (from `config.py`). The reference image is `Ref_image.png`.
+
+4) Distance Estimation at Runtime
+   - For current frame, estimate the camera-to-face distance `D` as:
+     D = (W_known × f) / w
+   - If `D < human_detect_threshold` (default 20 cm), set a flag indicating the patient is within the safe operating range.
+
+5) Robot Gating via Serial Commands
+   - When the face is detected within threshold, send `HD` (Human Detected) over serial; otherwise send `NHD` (Not Human Detected).
+   - An audio prompt (`sit.mp3`) is played when the system first detects proximity, signaling the subject to prepare.
+
+Method: Mouth State Estimation (Open/Closed)
+1) Detection and Landmark Localization
+   - Use dlib’s HOG-based frontal face detector to obtain face regions.
+   - Apply dlib’s `shape_predictor_68_face_landmarks.dat` to extract 68 facial landmarks.
+
+2) Mouth Openness Metric
+   - Compute the Euclidean distance between upper and lower inner-lip landmarks: points 51 (upper inner lip) and 57 (lower inner lip).
+   - Define mouth openness as:
+     M = ||(x_51, y_51) − (x_57, y_57)||
+   - Compare `M` to a calibrated threshold `mouthOpenThreshold` (default 80, see `config.py`).
+     • If `M > mouthOpenThreshold` → Mouth Open.
+     • Else → Mouth Closed.
+
+3) Feedback and Robot Control
+   - Visual overlay for operator feedback (landmark points and labels).
+   - When mouth opens, send `MO` (Mouth Open) over serial; when closed, send `MC` (Mouth Closed).
+   - A periodic audio reminder (`open.mp3`) is played if the mouth remains closed beyond a timer (interval ≈ 15 seconds) to prompt compliance.
+   - If mouth remains open for a sufficient duration (e.g., >15 frames), the system marks readiness for sampling.
+--------------
+
+
+System Flow
+1) Proximity Gate: Haar-based face detection estimates distance. Only when `D < human_detect_threshold` does the system proceed.
+2) Mouth Monitoring: Dlib landmark-based metric drives `MO/MC` serial commands and audio prompts to coordinate the robotic approach and sampling.
+3) Safety: The robot actuates sampling only when both proximity and mouth-open conditions are satisfied, reducing risk and ensuring patient readiness.
+
+Calibration and Tuning
+- Focal length is computed once using a reference image. For deployment in new environments, re-capture `Ref_image.png` at a measured `D_known` with a subject of known `W_known`.
+- Adjust `scaleFactor`/`minNeighbors` for Haar detection under varying lighting and camera quality.
+- Tune `mouthOpenThreshold` based on camera resolution and subject distance to maintain reliable mouth state classification.
+
+Performance Considerations
+- All operations are real-time on commodity hardware; grayscale conversion and Haar detection are lightweight.
+- Landmark extraction is more computationally intensive; limiting to one face and resizing frames can improve throughput.
+- The system uses simple decision logic and serial I/O to minimize latency between perception and robot control.
+
+Limitations and Alternatives
+- Haar cascades may struggle with profile views, occlusions, or extreme lighting changes.
+- Dlib’s predictor assumes near-frontal faces; large head rotations can degrade mouth metric accuracy.
+- As an alternative (demonstrated in `demo.py`), MediaPipe Face Mesh can offer improved robustness across poses and lighting, with dense landmarks for more nuanced mouth metrics.
+
+Method: Face Detection Using MediaPipe Face Mesh (Alternative)
+1) Initialization
+   - Use MediaPipe Face Mesh (`mp.solutions.face_mesh.FaceMesh`) with `max_num_faces = 1` to track facial landmarks in real time.
+   - The presence of `results.multi_face_landmarks` is treated as a face detection event.
+
+2) Preprocessing
+   - Horizontally flip frames for user-friendly interaction and convert BGR → RGB before inference.
+   - Process frames via `face_mesh.process(image_rgb)` to obtain dense facial landmarks.
+
+3) Detection Output
+   - If `results.multi_face_landmarks` is not empty, at least one face is present.
+   - Landmarks are provided in normalized image coordinates; optional visualization uses `mp_drawing.draw_landmarks` for operator feedback.
+
+4) Mouth Openness via MediaPipe Landmarks
+   - Compute the distance between landmarks 13 (upper lip, midline) and 14 (lower lip, midline) from `face_landmarks.landmark`.
+   - Define mouth openness as:
+     M_mp = sqrt((x_14 − x_13)^2 + (y_14 − y_13)^2)
+   - Compare `M_mp` to a normalized threshold (empirically `≈ 0.02` for typical webcam setups).
+     • If `M_mp > threshold` → Mouth Open.
+     • Else → Mouth Closed.
+
+5) Robot Integration and Prompts
+   - Send `MO`/`MC` over serial for mouth-open/closed states; use audio prompts (`open.mp3`) when closed persistently.
+   - Combine with proximity gating from the Haar-based distance estimator when both pipelines are active.
+
+6) Notes on Calibration and Robustness
+   - Thresholds in normalized coordinates depend on camera FOV and subject distance; adjust during setup.
+   - MediaPipe Face Mesh is more tolerant of moderate head pose variation and lighting changes than Haar-only detection.
+   - If bounding boxes are required, MediaPipe Face Detection (not used here) provides face rectangles and keypoints suitable for presence detection.
+
+Ethical and Safety Notes
+- The system is non-contact during detection, only proceeding when safety gates are satisfied.
+- Audio cues and distance gating promote patient comfort and reduce the chance of inadvertent contact.
+
+References
+[1] P. Viola and M. Jones, “Rapid Object Detection using a Boosted Cascade of Simple Features,” CVPR, 2001.
+[2] V. Kazemi and J. Sullivan, “One Millisecond Face Alignment with an Ensemble of Regression Trees,” CVPR, 2014.
+[3] N. Dalal and B. Triggs, “Histograms of Oriented Gradients for Human Detection,” CVPR, 2005.
+[4] F. Zhang et al., “MediaPipe: A Framework for Building Perception Pipelines,” Google Research, 2019.
