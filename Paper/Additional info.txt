@@ -1,1 +1,13 @@
 Camera Model -> Logitech C270 HD Webcam
+
+Robot Arm Angles
+- Total unique servo angles used: 6
+- Wrist (W): 20, 85, 90; default 90; supported range ~10–130
+- Grabber (G): 170, 179, 180; default 179; supported range ~160–180
+
+Stepper Motor Angles (200 steps/rev, 1.8°/step)
+- Resolution: 1.8° per step; angles at multiples of 1.8°
+- Total unique stepper angles used: 10
+- X axis angles used: 450°, 558°
+- Y axis angles used: 54°, 90°, 126°, 180°, 216°
+- Z axis angles used: 126°, 198°, 270°, 360°
