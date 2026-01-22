@@ -11,3 +11,6 @@ Stepper Motor Angles (200 steps/rev, 1.8°/step)
 - X axis angles used: 450°, 558°
 - Y axis angles used: 54°, 90°, 126°, 180°, 216°
 - Z axis angles used: 126°, 198°, 270°, 360°
+ /usr/sbin/amavisd showkeys
+
+
